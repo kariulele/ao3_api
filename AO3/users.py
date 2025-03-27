@@ -1,7 +1,7 @@
-import datetime
+import time
+import warnings
 from functools import cached_property
 
-import requests
 from bs4 import BeautifulSoup
 
 from . import threadable, utils
@@ -65,6 +65,18 @@ class User:
         
         self._session = session 
         
+    def soup_bookmarks_find_retry(self, name, attrs):
+        result = None
+        for i in range(3):
+            result = self._soup_bookmarks.find(name, attrs)
+            if result:
+                break
+            time.sleep(3)
+
+        if not result:
+            warnings.warn(f"No result found for {name} and {attrs}")
+        return result
+
     @threadable.threadable
     def reload(self):
         """
@@ -90,9 +102,9 @@ class User:
             setattr(self, "authenticity_token", token["content"])
 
         @threadable.threadable
-        def req_bookmarks(username): 
+        def req_bookmarks(username):
             self._soup_bookmarks = self.request(f"https://archiveofourown.org/users/{username}/bookmarks")
-            token = self._soup_bookmarks.find("meta", {"name": "csrf-token"})
+            token = self.soup_bookmarks_find_retry("meta", {"name": "csrf-token"})
             setattr(self, "authenticity_token", token["content"])
             
         rs = [req_works(self.username, threaded=True),
@@ -275,13 +287,13 @@ class User:
             int: Number of bookmarks 
         """
 
-        div = self._soup_bookmarks.find("div", {"class": "bookmarks-index dashboard filtered region"})
+        div = self.soup_bookmarks_find_retry("div", {"class": "bookmarks-index dashboard filtered region"})
         h2 = div.h2.text.split()
         return int(h2[4].replace(',', ''))  
 
     @cached_property
     def _bookmarks_pages(self):
-        pages = self._soup_bookmarks.find("ol", {"title": "pagination"})
+        pages = self.soup_bookmarks_find_retry("ol", {"title": "pagination"})
         if pages is None:
             return 1
         n = 1
@@ -327,7 +339,7 @@ class User:
         from .works import Work
         self._soup_bookmarks = self.request(f"https://archiveofourown.org/users/{self.username}/bookmarks?page={page}")
             
-        ol = self._soup_bookmarks.find("ol", {"class": "bookmark index group"})
+        ol = self.soup_bookmarks_find_retry("ol", {"class": "bookmark index group"})
 
         for work in ol.find_all("li", {"role": "article"}):
             authors = []
