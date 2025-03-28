@@ -279,7 +279,7 @@ class User:
 
     @cached_property
     def _bookmarks_pages(self):
-        pages = self._soup_bookmarks_.find("ol", {"title": "pagination"})
+        pages = self._soup_bookmarks.find("ol", {"title": "pagination"})
         if pages is None:
             return 1
         n = 1
