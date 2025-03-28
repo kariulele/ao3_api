@@ -208,7 +208,7 @@ class Session(GuestSession):
     def _subscription_pages(self):
         url = self._subscriptions_url.format(self.username, 1)
         soup = self.request(url)
-        pages = soup.find("ol", {"title": "pagination"})
+        pages = soup.find("ol", {"aria-label": "Pagination"})
         if pages is None:
             return 1
         n = 1
@@ -325,7 +325,7 @@ class Session(GuestSession):
     def _history_pages(self):
         url = self._history_url.format(self.username, 1)
         soup = self.request(url)
-        pages = soup.find("ol", {"title": "pagination"})
+        pages = soup.find("ol", {"aria-label": "Pagination"})
         if pages is None:
             return 1
         n = 1
@@ -423,7 +423,7 @@ class Session(GuestSession):
     def _bookmark_pages(self):
         url = self._bookmarks_url.format(self.username, 1)
         soup = self.request(url)
-        pages = soup.find("ol", {"title": "pagination"})
+        pages = soup.find("ol", {"aria-label": "Pagination"})
         if pages is None:
             return 1
         n = 1
