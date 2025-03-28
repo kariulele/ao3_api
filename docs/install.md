@@ -11,4 +11,4 @@ __Requirements__
 - BeautifulSoup4
 - Requests
 - LXML
-    
+- Retry

@@ -2,6 +2,7 @@ import threading
 import time
 
 import requests
+from retry import retry
 
 
 class Requester:
@@ -28,6 +29,7 @@ class Requester:
     def setTimeW(self, value):
         self._timew = value
 
+    @retry(tries=3, delay=5)
     def request(self, *args, **kwargs):
         """Requests a web page once enough time has passed since the last request
         
