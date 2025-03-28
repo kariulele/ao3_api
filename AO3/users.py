@@ -30,13 +30,13 @@ class User:
         self._bookmarks = None
         if load:
             self.reload()
-            
+
     def __repr__(self):
         return f"<User [{self.username}]>"
-    
+
     def __eq__(self, other):
         return isinstance(other, __class__) and other.username == self.username
-    
+
     def __getstate__(self):
         d = {}
         for attr in self.__dict__:
@@ -45,7 +45,7 @@ class User:
             else:
                 d[attr] = (self.__dict__[attr], False)
         return d
-                
+
     def __setstate__(self, d):
         for attr in d:
             value, issoup = d[attr]
@@ -53,21 +53,19 @@ class User:
                 self.__dict__[attr] = BeautifulSoup(value, "lxml")
             else:
                 self.__dict__[attr] = value
-        
+
     def set_session(self, session):
         """Sets the session used to make requests for this work
 
         Args:
             session (AO3.Session/AO3.GuestSession): session object
         """
-        
+
         self._session = session
 
-    @threadable.threadable
     def reload(self):
         """
         Loads information about this user.
-        This function is threadable.
         """
         
         for attr in self.__class__.__dict__:
@@ -79,18 +77,24 @@ class User:
         def req_works(username):
             self._soup_works = self.request(f"https://archiveofourown.org/users/{username}/works")
             token = self._soup_works.find("meta", {"name": "csrf-token"})
+            if not token:
+                return
             setattr(self, "authenticity_token", token["content"])
-           
+
         @threadable.threadable
         def req_profile(username): 
             self._soup_profile = self.request(f"https://archiveofourown.org/users/{username}/profile")
             token = self._soup_profile.find("meta", {"name": "csrf-token"})
+            if not token:
+                return
             setattr(self, "authenticity_token", token["content"])
 
         @threadable.threadable
         def req_bookmarks(username):
             self._soup_bookmarks = self.request(f"https://archiveofourown.org/users/{username}/bookmarks")
             token = self._soup_bookmarks.find("meta", {"name": "csrf-token"})
+            if not token:
+                return
             setattr(self, "authenticity_token", token["content"])
             
         rs = [req_works(self.username, threaded=True),
@@ -99,22 +103,25 @@ class User:
         for r in rs:
             r.join()
 
+        if not hasattr(self, "authenticity_token") or self.authenticity_token is None:
+            raise ValueError("No authenticity token")
+
         self._works = None
         self._bookmarks = None
-        
+
     def get_avatar(self):
         """Returns a tuple containing the name of the file and its data
 
         Returns:
             tuple: (name: str, img: bytes)
         """
-        
+
         icon = self._soup_profile.find("p", {"class": "icon"})
         src = icon.img.attrs["src"]
         name = src.split("/")[-1].split("?")[0]
         img = self.get(src).content
         return name, img
-    
+
     @threadable.threadable
     def subscribe(self):
         """Subscribes to this user.
@@ -123,12 +130,12 @@ class User:
         Raises:
             utils.AuthError: Invalid session
         """
-        
+
         if self._session is None or not self._session.is_authed:
             raise utils.AuthError("You can only subscribe to a user using an authenticated session")
-        
+
         utils.subscribe(self, "User", self._session)
-        
+
     @threadable.threadable
     def unsubscribe(self):
         """Unubscribes from this user.
@@ -137,63 +144,63 @@ class User:
         Raises:
             utils.AuthError: Invalid session
         """
-        
+
         if not self.is_subscribed:
             raise Exception("You are not subscribed to this user")
         if self._session is None or not self._session.is_authed:
             raise utils.AuthError("You can only unsubscribe from a user using an authenticated session")
-        
+
         utils.subscribe(self, "User", self._session, True, self._sub_id)
-        
+
     @property
     def id(self):
         id_ = self._soup_profile.find("input", {"id": "subscription_subscribable_id"})
         return int(id_["value"]) if id_ is not None else None
-        
+
     @cached_property
     def is_subscribed(self):
         """True if you're subscribed to this user"""
-        
+
         if self._session is None or not self._session.is_authed:
             raise utils.AuthError("You can only get a user ID using an authenticated session")
-        
+
         header = self._soup_profile.find("div", {"class": "primary header module"})
         input_ = header.find("input", {"name": "commit", "value": "Unsubscribe"})
         return input_ is not None
-    
+
     @property
     def loaded(self):
         """Returns True if this user has been loaded"""
         return self._soup_profile is not None
-    
+
     # @cached_property
     # def authenticity_token(self):
     #     """Token used to take actions that involve this user"""
-        
+
     #     if not self.loaded:
     #         return None
-        
+
     #     token = self._soup_profile.find("meta", {"name": "csrf-token"})
     #     return token["content"]
-    
+
     @cached_property
     def user_id(self):
         if self._session is None or not self._session.is_authed:
             raise utils.AuthError("You can only get a user ID using an authenticated session")
-        
+
         header = self._soup_profile.find("div", {"class": "primary header module"})
         input_ = header.find("input", {"name": "subscription[subscribable_id]"})
         if input_ is None:
             raise utils.UnexpectedResponseError("Couldn't fetch user ID")
         return int(input_.attrs["value"])
-    
+
     @cached_property
     def _sub_id(self):
         """Returns the subscription ID. Used for unsubscribing"""
-        
+
         if not self.is_subscribed:
             raise Exception("You are not subscribed to this user")
-        
+
         header = self._soup_profile.find("div", {"class": "primary header module"})
         id_ = header.form.attrs["action"].split("/")[-1]
         return int(id_)
@@ -208,7 +215,7 @@ class User:
 
         div = self._soup_works.find("div", {"class": "works-index dashboard filtered region"})
         h2 = div.h2.text.split()
-        return int(h2[4].replace(',', '')) 
+        return int(h2[4].replace(',', ''))
 
     @cached_property
     def _works_pages(self):
@@ -221,7 +228,7 @@ class User:
             if text.isdigit():
                 n = int(text)
         return n
-    
+
     def get_works(self, use_threading=False):
         """
         Get works authored by this user.
@@ -229,7 +236,7 @@ class User:
         Returns:
             list: List of works
         """
-        
+
         if self._works is None:
             if use_threading:
                 self.load_works_threaded()
@@ -238,14 +245,14 @@ class User:
                 for page in range(self._works_pages):
                     self._load_works(page=page+1)
         return self._works
-    
+
     @threadable.threadable
     def load_works_threaded(self):
         """
         Get the user's works using threads.
         This function is threadable.
-        """ 
-        
+        """
+
         threads = []
         self._works = []
         for page in range(self._works_pages):
@@ -257,7 +264,7 @@ class User:
     def _load_works(self, page=1):
         from .works import Work
         self._soup_works = self.request(f"https://archiveofourown.org/users/{self.username}/works?page={page}")
-            
+
         ol = self._soup_works.find("ol", {"class": "work index group"})
 
         for work in ol.find_all("li", {"role": "article"}):
@@ -270,12 +277,12 @@ class User:
         """Returns the number of works user has bookmarked
 
         Returns:
-            int: Number of bookmarks 
+            int: Number of bookmarks
         """
 
         div = self._soup_bookmarks.find("div", {"class": "bookmarks-index dashboard filtered region"})
         h2 = div.h2.text.split()
-        return int(h2[4].replace(',', ''))  
+        return int(h2[4].replace(',', ''))
 
     @cached_property
     def _bookmarks_pages(self):
@@ -296,7 +303,7 @@ class User:
         Returns:
             list: List of works
         """
-        
+
         if self._bookmarks is None:
             if use_threading:
                 self.load_bookmarks_threaded()
@@ -305,14 +312,14 @@ class User:
                 for page in range(self._bookmarks_pages):
                     self._load_bookmarks(page=page+1)
         return self._bookmarks
-    
+
     @threadable.threadable
     def load_bookmarks_threaded(self):
         """
         Get the user's bookmarks using threads.
         This function is threadable.
-        """ 
-        
+        """
+
         threads = []
         self._bookmarks = []
         for page in range(self._bookmarks_pages):
@@ -324,7 +331,7 @@ class User:
     def _load_bookmarks(self, page=1):
         from .works import Work
         self._soup_bookmarks = self.request(f"https://archiveofourown.org/users/{self.username}/bookmarks?page={page}")
-            
+
         ol = self._soup_bookmarks.find("ol", {"class": "bookmark index group"})
 
         for work in ol.find_all("li", {"role": "article"}):
@@ -332,7 +339,7 @@ class User:
             if work.h4 is None:
                 continue
             self._bookmarks.append(get_work_from_banner(work))
-    
+
     @cached_property
     def bio(self):
         """Returns the user's bio
@@ -345,8 +352,8 @@ class User:
         if div is None:
             return ""
         blockquote = div.find("blockquote", {"class": "userstuff"})
-        return blockquote.getText() if blockquote is not None else ""    
-    
+        return blockquote.getText() if blockquote is not None else ""
+
     @cached_property
     def url(self):
         """Returns the URL to the user's profile
@@ -355,11 +362,11 @@ class User:
             str: user profile URL
         """
 
-        return "https://archiveofourown.org/users/%s"%self.username      
+        return "https://archiveofourown.org/users/%s"%self.username
 
     def get(self, *args, **kwargs):
-        """Request a web page and return a Response object"""  
-        
+        """Request a web page and return a Response object"""
+
         if self._session is None:
             req = requester.request("get", *args, **kwargs)
         else:
